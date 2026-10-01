@@ -139,7 +139,6 @@ workday_scraper/
 ├── web/index.html          frontend: scrape form, progress bar, search/filter/sort UI
 ├── jobs_ui.html             standalone offline viewer (open directly, no server)
 ├── data/                     scraped output lands here (gitignored)
-├── legacy/                    earlier one-tenant-per-script versions, kept for reference
 ├── requirements.txt
 └── LICENSE
 ```
