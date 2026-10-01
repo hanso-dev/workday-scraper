@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workday Scraper</title>
+<style>
+  :root{
+    --bg:#f5f4f0;
+    --surface:#ffffff;
+    --surface-2:#ebe9e3;
+    --border:#dcd9d1;
+    --text:#1c1b19;
+    --text-dim:#66635b;
+    --text-faint:#9a968a;
+    --accent:#2f6fed;
+    --accent-ink:#ffffff;
+    --accent-soft:#e6edfc;
+    --ok:#1f8a4c;
+    --fail:#c8372f;
+    --mark:#ffe08a;
+    --shadow: 0 1px 2px rgba(28,27,25,0.06), 0 6px 16px -8px rgba(28,27,25,0.12);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#17181a;
+      --surface:#1f2123;
+      --surface-2:#26282b;
+      --border:#34363a;
+      --text:#eceae4;
+      --text-dim:#a6a49b;
+      --text-faint:#726f66;
+      --accent:#6d9bff;
+      --accent-ink:#0c1420;
+      --accent-soft:#1c2433;
+      --ok:#4ac17e;
+      --fail:#ef6a62;
+      --mark:#5b4c1c;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px -8px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding-inline:16px;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding-block:20px 60px;}
+
+  h1{font-size:15px; font-weight:700; margin:0 0 4px;}
+  .sub{font-size:12.5px; color:var(--text-dim); margin-bottom:18px;}
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:var(--shadow); padding:16px; margin-bottom:16px;
+  }
+
+  .scrape-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .scrape-row input[type="url"]{
+    flex:1; min-width:220px;
+    font:inherit; font-size:14px; padding:10px 12px;
+    border:1px solid var(--border); border-radius:7px;
+    background:var(--surface-2); color:var(--text);
+  }
+  .scrape-row input[type="url"]:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+  .scrape-row button{
+    font:inherit; font-size:13.5px; font-weight:600; color:var(--accent-ink);
+    background:var(--accent); border:none; border-radius:7px; padding:10px 18px; cursor:pointer;
+  }
+  .scrape-row button:disabled{opacity:0.5; cursor:default;}
+
+  .opts{
+    display:flex; flex-wrap:wrap; gap:12px 20px; align-items:center;
+    margin-top:10px; font-size:12.5px; color:var(--text-dim);
+  }
+  .opts label{display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;}
+  .opts input[type="checkbox"]{accent-color:var(--accent);}
+  .opts input[type="number"], .opts input[type="text"]{
+    font:inherit; font-size:12.5px; width:72px; padding:5px 7px;
+    border:1px solid var(--border); border-radius:5px; background:var(--surface-2); color:var(--text);
+  }
+  .opts input[type="text"]{width:140px;}
+
+  .error-box{
+    margin-top:10px; font-size:13px; color:var(--fail);
+    background:color-mix(in srgb, var(--fail) 12%, transparent);
+    border:1px solid var(--fail); border-radius:7px; padding:8px 12px;
+  }
+
+  .progress{margin-top:14px;}
+  .progress-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12.5px; color:var(--text-dim); margin-bottom:6px;
+  }
+  .progress-head .phase{font-weight:600; color:var(--text); text-transform:capitalize;}
+  .bar-track{
+    height:8px; border-radius:100px; background:var(--surface-2); overflow:hidden;
+    border:1px solid var(--border);
+  }
+  .bar-fill{
+    height:100%; background:var(--accent); border-radius:100px;
+    transition:width .25s ease; width:0%;
+  }
+  .bar-fill.indeterminate{
+    width:30%; animation:slide 1.1s ease-in-out infinite;
+  }
+  @keyframes slide{
+    0%{margin-left:0%;} 50%{margin-left:70%;} 100%{margin-left:0%;}
+  }
+  .log{
+    margin-top:10px; max-height:140px; overflow-y:auto;
+    font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:var(--text-dim);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:7px;
+    padding:8px 10px; white-space:pre-wrap;
+  }
+
+  .datasets{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px; color:var(--text-dim);}
+  .datasets select{
+    font:inherit; font-size:12.5px; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:6px 8px;
+  }
+  .datasets button{
+    font:inherit; font-size:12.5px; color:var(--text-dim);
+    background:none; border:1px solid var(--border); border-radius:6px; padding:5px 10px; cursor:pointer;
+  }
+  .datasets button:hover{color:var(--text); border-color:var(--text-faint);}
+
+  /* ---- results list (shared look with jobs_ui.html) ---- */
+  .results-head{
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;
+    margin:22px 0 10px;
+  }
+  .results-head .count{font-size:12px; color:var(--text-dim);}
+  .results-head .count b{color:var(--text);}
+
+  .search-row{display:flex; gap:8px; margin-bottom:12px;}
+  .search-row input[type="search"]{
+    flex:1; min-width:0; font:inherit; font-size:14px; padding:10px 12px;
+    border:1px solid var(--border); border-radius:7px; background:var(--surface-2); color:var(--text);
+  }
+  .search-row input[type="search"]:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+
+  .filters{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; font-size:12.5px; color:var(--text-dim);}
+  .filters .group{display:flex; align-items:center; gap:6px;}
+  .filters label{display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none;}
+  .filters input[type="checkbox"]{accent-color:var(--accent); width:14px; height:14px;}
+  select.filter-select{
+    font:inherit; font-size:12.5px; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:6px 8px;
+  }
+  .sep{width:1px; align-self:stretch; background:var(--border); min-height:20px;}
+  .clear-btn{
+    font:inherit; font-size:12.5px; color:var(--text-dim); background:none;
+    border:1px solid var(--border); border-radius:6px; padding:6px 10px; cursor:pointer;
+  }
+  .clear-btn:hover{border-color:var(--text-faint); color:var(--text);}
+
+  .list{display:flex; flex-direction:column; gap:10px;}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:6px;
+  }
+  .card:hover{border-color:var(--accent);}
+  .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .card-title{font-size:15px; font-weight:600; line-height:1.35;}
+  .card-title a{color:var(--text); text-decoration:none;}
+  .card-title a:hover{color:var(--accent); text-decoration:underline;}
+  .posted-badge{
+    flex-shrink:0; font-size:11px; font-weight:600; letter-spacing:.02em;
+    padding:3px 8px; border-radius:100px; background:var(--surface-2); color:var(--text-dim); white-space:nowrap;
+  }
+  .posted-badge.new{background:var(--accent-soft); color:var(--accent);}
+  .meta-row{display:flex; flex-wrap:wrap; gap:6px 10px; font-size:12.5px; color:var(--text-dim);}
+  .meta-row .dot::before{content:"\00b7"; margin-right:10px; color:var(--text-faint);}
+  .tag{font-size:10.5px; color:var(--text-faint); font-family:ui-monospace, Menlo, monospace;}
+  .snippet{font-size:13px; color:var(--text-dim); line-height:1.5; margin-top:2px;}
+  .snippet mark{background:var(--mark); color:var(--text); border-radius:2px; padding:0 1px;}
+
+  .empty{text-align:center; padding:50px 20px; color:var(--text-faint);}
+  .empty .big{font-size:22px; margin-bottom:6px; color:var(--text-dim);}
+
+  .read-more{
+    align-self:flex-start; font:inherit; font-size:12.5px; font-weight:600;
+    color:var(--accent); background:none; border:none; padding:2px 0; cursor:pointer;
+  }
+  .read-more:hover{text-decoration:underline;}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.5);
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:24px 16px; z-index:50; overflow-y:auto;
+  }
+  .modal{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    box-shadow:var(--shadow); max-width:680px; width:100%; padding:22px 24px; margin-bottom:24px;
+  }
+  .modal-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px;}
+  .modal-head h2{font-size:17px; margin:0; line-height:1.35;}
+  .modal-close{
+    font:inherit; font-size:13px; color:var(--text-dim);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+    padding:5px 10px; cursor:pointer; flex-shrink:0;
+  }
+  .modal-close:hover{color:var(--text); border-color:var(--text-faint);}
+  .modal-meta{
+    display:flex; flex-wrap:wrap; gap:6px 10px; font-size:12.5px; color:var(--text-dim);
+    margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);
+  }
+  .modal-meta .dot::before{content:"\00b7"; margin-right:10px; color:var(--text-faint);}
+  .modal-apply{
+    display:inline-block; margin-bottom:14px; font-size:13px; font-weight:600; color:var(--accent-ink);
+    background:var(--accent); border-radius:7px; padding:8px 14px; text-decoration:none;
+  }
+  .modal-desc{font-size:13.5px; line-height:1.65; color:var(--text); white-space:pre-wrap; word-wrap:break-word;}
+  .modal-desc mark{background:var(--mark); color:var(--text); border-radius:2px; padding:0 1px;}
+
+  [hidden]{display:none !important;}
+
+  @media (max-width:520px){
+    .filters{font-size:12px;}
+    .card-top{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Workday Scraper</h1>
+  <div class="sub">Paste any *.myworkdayjobs.com careers URL to scrape it, or load a dataset you already have.</div>
+
+  <div class="panel">
+    <div class="scrape-row">
+      <input type="url" id="urlInput" placeholder="https://td.wd3.myworkdayjobs.com/en-US/TD_Bank_Careers" autocomplete="off">
+      <button id="scrapeBtn" type="button">Scrape</button>
+    </div>
+    <div class="opts">
+      <label>Output name <input type="text" id="outName" placeholder="auto (tenant name)"></label>
+      <label>Workers <input type="number" id="workers" value="24" min="1" max="128"></label>
+      <label><input type="checkbox" id="ignoreFilters"> Ignore URL filters (scrape everything)</label>
+      <label><input type="checkbox" id="noEnrich"> Skip full descriptions (faster)</label>
+    </div>
+    <div class="error-box" id="errorBox" hidden></div>
+
+    <div class="progress" id="progress" hidden>
+      <div class="progress-head">
+        <span class="phase" id="phaseLabel">starting</span>
+        <span id="progressCount"></span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+      <div class="log" id="logBox"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="datasets">
+      <span>Load existing dataset:</span>
+      <select id="datasetSelect"><option value="">— choose —</option></select>
+      <button id="refreshDatasets" type="button">Refresh</button>
+    </div>
+  </div>
+
+  <div id="resultsSection" hidden>
+    <div class="results-head">
+      <div class="sub" id="resultsSource" style="margin:0;"></div>
+      <div class="count" id="count"></div>
+    </div>
+
+    <div class="panel" style="position:sticky; top:10px; z-index:5;">
+      <div class="search-row">
+        <input type="search" id="q" placeholder="Search title, location, or description" autocomplete="off">
+      </div>
+      <div class="filters">
+        <div class="group" id="remoteGroup" hidden></div>
+        <div class="sep" id="remoteSep" hidden></div>
+        <div class="group">
+          <label for="posted">Posted within</label>
+          <select class="filter-select" id="posted">
+            <option value="9999">Any time</option>
+            <option value="1">24 hours</option>
+            <option value="3">3 days</option>
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30">30 days</option>
+          </select>
+        </div>
+        <div class="sep"></div>
+        <div class="group">
+          <label for="sort">Sort</label>
+          <select class="filter-select" id="sort">
+            <option value="recent">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title A-Z</option>
+          </select>
+        </div>
+        <div class="sep"></div>
+        <button class="clear-btn" id="clearBtn">Clear filters</button>
+      </div>
+    </div>
+
+    <div class="list" id="list"></div>
+    <div class="empty" id="noMatches" hidden>
+      <div class="big">No matches</div>
+      <div>Try fewer keywords or clear a filter.</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="overlay" hidden></div>
+
+<script>
+(function(){
+  var state = { jobs: [], remoteTypes: [], activeRemote: new Set() };
+  var pollTimer = null;
+
+  function esc(s){
+    return (s||'').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function highlight(text, terms){
+    if(!terms.length) return esc(text);
+    var out = esc(text);
+    terms.forEach(function(t){
+      if(!t) return;
+      var re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'ig');
+      out = out.replace(re, '<mark>$1</mark>');
+    });
+    return out;
+  }
+  function snippetAround(desc, terms){
+    var lower = desc.toLowerCase();
+    var idx = -1;
+    for(var i=0;i<terms.length;i++){
+      var p = lower.indexOf(terms[i]);
+      if(p !== -1){ idx = p; break; }
+    }
+    var start = idx === -1 ? 0 : Math.max(0, idx - 60);
+    var chunk = desc.slice(start, start + 220).trim();
+    return (start > 0 ? '…' : '') + chunk + (start + 220 < desc.length ? '…' : '');
+  }
+  function parseDaysAgo(s){
+    s = s || '';
+    if (/today/i.test(s)) return 0;
+    if (/yesterday/i.test(s)) return 1;
+    var m = s.match(/(\d+)\+?\s+Days?\s+Ago/i);
+    if (m) return parseInt(m[1], 10);
+    return null;
+  }
+  function normalize(raw){
+    return raw.map(function(j){
+      var postedOn = j.postedOn || null;
+      var daysAgo = parseDaysAgo(postedOn);
+      var reqId = j.jobReqId || (Array.isArray(j.bulletFields) ? j.bulletFields[0] : null);
+      var url = j.externalUrl || j.externalPath || '';
+      return {
+        title: j.title || '(untitled)',
+        location: j.locationsText || j.location || '',
+        remote: j.remoteType || '',
+        postedOn: postedOn,
+        daysAgo: daysAgo,
+        reqId: reqId,
+        timeType: j.timeType || '',
+        url: url,
+        desc: j.description || ''
+      };
+    });
+  }
+
+  // ---------- scrape flow ----------
+
+  function setError(msg){
+    var box = document.getElementById('errorBox');
+    if(!msg){ box.hidden = true; box.textContent=''; return; }
+    box.hidden = false; box.textContent = msg;
+  }
+
+  function startScrape(){
+    var url = document.getElementById('urlInput').value.trim();
+    if(!url){ setError('Enter a Workday careers URL first.'); return; }
+    setError(null);
+
+    var body = {
+      url: url,
+      out: document.getElementById('outName').value.trim() || null,
+      workers: parseInt(document.getElementById('workers').value, 10) || 24,
+      ignore_url_filters: document.getElementById('ignoreFilters').checked,
+      no_enrich: document.getElementById('noEnrich').checked
+    };
+
+    document.getElementById('scrapeBtn').disabled = true;
+    document.getElementById('progress').hidden = false;
+    document.getElementById('phaseLabel').textContent = 'starting';
+    document.getElementById('progressCount').textContent = '';
+    document.getElementById('logBox').textContent = '';
+    document.getElementById('barFill').style.width = '0%';
+    document.getElementById('barFill').classList.add('indeterminate');
+
+    fetch('/api/scrape', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(function(r){
+      if(!r.ok) return r.json().then(function(e){ throw new Error(e.detail || 'request failed'); });
+      return r.json();
+    }).then(function(data){
+      pollProgress(data.job_id);
+    }).catch(function(e){
+      setError(e.message);
+      document.getElementById('scrapeBtn').disabled = false;
+      document.getElementById('progress').hidden = true;
+    });
+  }
+
+  function pollProgress(jobId){
+    if(pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(function(){
+      fetch('/api/scrape/' + jobId).then(function(r){ return r.json(); }).then(function(st){
+        renderProgress(st);
+        if(st.phase === 'done'){
+          clearInterval(pollTimer);
+          document.getElementById('scrapeBtn').disabled = false;
+          refreshDatasets(function(){
+            loadDataset(st.stem + '.json');
+          });
+        } else if(st.phase === 'error'){
+          clearInterval(pollTimer);
+          document.getElementById('scrapeBtn').disabled = false;
+          setError(st.error || 'scrape failed');
+        }
+      }).catch(function(){ /* transient, keep polling */ });
+    }, 600);
+  }
+
+  function renderProgress(st){
+    var phaseLabel = document.getElementById('phaseLabel');
+    var countEl = document.getElementById('progressCount');
+    var fill = document.getElementById('barFill');
+    phaseLabel.textContent = st.phase;
+
+    if(st.phase === 'listing'){
+      countEl.textContent = st.list_total ? (st.list_done + ' / ' + st.list_total) : (st.list_done + ' found');
+      fill.classList.remove('indeterminate');
+      fill.style.width = st.list_total ? Math.round(100 * st.list_done / st.list_total) + '%' : '15%';
+    } else if(st.phase === 'enriching'){
+      countEl.textContent = st.enrich_total ? (st.enrich_done + ' / ' + st.enrich_total) : '';
+      fill.classList.remove('indeterminate');
+      fill.style.width = st.enrich_total ? Math.round(100 * st.enrich_done / st.enrich_total) + '%' : '15%';
+    } else if(st.phase === 'done'){
+      countEl.textContent = st.total + ' jobs';
+      fill.classList.remove('indeterminate');
+      fill.style.width = '100%';
+    } else {
+      fill.classList.add('indeterminate');
+      countEl.textContent = '';
+    }
+
+    var logBox = document.getElementById('logBox');
+    logBox.textContent = (st.log || []).join('\n');
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  // ---------- datasets ----------
+
+  function refreshDatasets(done){
+    fetch('/api/datasets').then(function(r){ return r.json(); }).then(function(list){
+      var sel = document.getElementById('datasetSelect');
+      var current = sel.value;
+      sel.innerHTML = '<option value="">— choose —</option>';
+      list.sort(function(a,b){ return b.mtime - a.mtime; });
+      list.forEach(function(d){
+        var opt = document.createElement('option');
+        opt.value = d.name;
+        opt.textContent = d.name + '  (' + Math.round(d.size/1024) + ' KB)';
+        sel.appendChild(opt);
+      });
+      if(current) sel.value = current;
+      if(done) done();
+    });
+  }
+
+  function loadDataset(name){
+    fetch('/api/datasets/' + encodeURIComponent(name)).then(function(r){ return r.json(); }).then(function(data){
+      document.getElementById('resultsSource').textContent = name + ' · ' + data.length + ' jobs';
+      document.getElementById('datasetSelect').value = name;
+      init(normalize(data));
+    }).catch(function(e){
+      setError('Could not load ' + name);
+    });
+  }
+
+  document.getElementById('datasetSelect').addEventListener('change', function(e){
+    if(e.target.value) loadDataset(e.target.value);
+  });
+  document.getElementById('refreshDatasets').addEventListener('click', function(){ refreshDatasets(); });
+  document.getElementById('scrapeBtn').addEventListener('click', startScrape);
+  document.getElementById('urlInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') startScrape();
+  });
+
+  // ---------- results rendering (search / filter / sort) ----------
+
+  function openModal(j, terms){
+    var overlay = document.getElementById('overlay');
+    overlay.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-head">' +
+          '<h2>' + highlight(j.title, terms) + '</h2>' +
+          '<button class="modal-close" id="modalClose">Close</button>' +
+        '</div>' +
+        '<div class="modal-meta">' +
+          '<span>' + esc(j.location || 'Location TBD') + '</span>' +
+          (j.remote ? '<span class="dot">' + esc(j.remote) + '</span>' : '') +
+          (j.timeType ? '<span class="dot">' + esc(j.timeType) + '</span>' : '') +
+          (j.reqId ? '<span class="dot tag">' + esc(j.reqId) + '</span>' : '') +
+          '<span class="dot">' + esc(j.postedOn || '') + '</span>' +
+        '</div>' +
+        (j.url ? '<a class="modal-apply" href="' + esc(j.url) + '" target="_blank" rel="noopener">Open posting →</a>' : '') +
+        '<div class="modal-desc">' + (j.desc ? highlight(j.desc, terms) : '<span style="color:var(--text-faint)">No description available.</span>') + '</div>' +
+      '</div>';
+    overlay.hidden = false;
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e){ if(e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', escHandler);
+  }
+  function closeModal(){
+    var overlay = document.getElementById('overlay');
+    overlay.hidden = true; overlay.innerHTML = '';
+    document.removeEventListener('keydown', escHandler);
+  }
+  function escHandler(e){ if(e.key === 'Escape') closeModal(); }
+
+  function render(){
+    var q = document.getElementById('q').value.trim().toLowerCase();
+    var terms = q.split(/\s+/).filter(Boolean);
+    var maxDays = parseInt(document.getElementById('posted').value, 10);
+    var sortMode = document.getElementById('sort').value;
+
+    var filtered = state.jobs.filter(function(j){
+      if(state.activeRemote.size && !state.activeRemote.has(j.remote)) return false;
+      if(j.daysAgo != null && j.daysAgo > maxDays) return false;
+      if(maxDays < 9999 && j.daysAgo == null) return false;
+      if(!terms.length) return true;
+      return terms.every(function(t){ return j._hay.indexOf(t) !== -1; });
+    });
+
+    filtered.sort(function(a,b){
+      if(sortMode === 'title') return a.title.localeCompare(b.title);
+      var da = a.daysAgo == null ? 9999 : a.daysAgo;
+      var db = b.daysAgo == null ? 9999 : b.daysAgo;
+      return sortMode === 'oldest' ? db - da : da - db;
+    });
+
+    document.getElementById('count').innerHTML = '<b>' + filtered.length + '</b> / ' + state.jobs.length + ' roles';
+
+    var list = document.getElementById('list');
+    var noMatches = document.getElementById('noMatches');
+    if(!filtered.length){
+      list.innerHTML = '';
+      noMatches.hidden = false;
+      return;
+    }
+    noMatches.hidden = true;
+
+    var frag = document.createDocumentFragment();
+    filtered.slice(0, 500).forEach(function(j){
+      var card = document.createElement('div');
+      card.className = 'card';
+      var isNew = j.daysAgo != null && j.daysAgo <= 1;
+      var snippet = j.desc ? highlight(snippetAround(j.desc, terms), terms) : '';
+      card.innerHTML =
+        '<div class="card-top">' +
+          '<div class="card-title">' + (j.url ? '<a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + highlight(j.title, terms) + '</a>' : highlight(j.title, terms)) + '</div>' +
+          '<div class="posted-badge' + (isNew ? ' new' : '') + '">' + esc(j.postedOn || '—') + '</div>' +
+        '</div>' +
+        '<div class="meta-row">' +
+          '<span>' + highlight(j.location || 'Location TBD', terms) + '</span>' +
+          (j.remote ? '<span class="dot">' + esc(j.remote) + '</span>' : '') +
+          (j.timeType ? '<span class="dot">' + esc(j.timeType) + '</span>' : '') +
+          (j.reqId ? '<span class="dot tag">' + esc(j.reqId) + '</span>' : '') +
+        '</div>' +
+        (snippet ? '<div class="snippet">' + snippet + '</div>' : '') +
+        (j.desc ? '<button class="read-more" type="button">Read full description</button>' : '');
+      var btn = card.querySelector('.read-more');
+      if(btn) btn.addEventListener('click', function(){ openModal(j, terms); });
+      frag.appendChild(card);
+    });
+    list.innerHTML = '';
+    list.appendChild(frag);
+  }
+
+  function buildRemoteFilter(){
+    var group = document.getElementById('remoteGroup');
+    var sep = document.getElementById('remoteSep');
+    group.innerHTML = '';
+    group.hidden = !state.remoteTypes.length;
+    sep.hidden = !state.remoteTypes.length;
+    state.remoteTypes.forEach(function(rt){
+      var id = 'r_' + rt.replace(/\W+/g,'_');
+      var label = document.createElement('label');
+      label.innerHTML = '<input type="checkbox" id="' + id + '" value="' + esc(rt) + '"> ' + esc(rt);
+      group.appendChild(label);
+      label.querySelector('input').addEventListener('change', function(e){
+        if(e.target.checked) state.activeRemote.add(rt);
+        else state.activeRemote.delete(rt);
+        render();
+      });
+    });
+  }
+
+  function init(jobs){
+    state.activeRemote = new Set();
+    state.remoteTypes = [];
+    state.jobs = jobs.filter(function(j){ return j.title; }).map(function(j){
+      j._hay = ((j.title||'') + ' ' + (j.location||'') + ' ' + (j.remote||'') + ' ' + (j.desc||'')).toLowerCase();
+      return j;
+    });
+    var seen = {};
+    state.jobs.forEach(function(j){ if(j.remote && !seen[j.remote]){ seen[j.remote]=1; state.remoteTypes.push(j.remote); } });
+    state.remoteTypes.sort();
+    buildRemoteFilter();
+
+    document.getElementById('q').value = '';
+    document.getElementById('posted').value = '9999';
+    document.getElementById('sort').value = 'recent';
+    document.getElementById('resultsSection').hidden = false;
+    render();
+  }
+
+  document.getElementById('q').addEventListener('input', render);
+  document.getElementById('posted').addEventListener('change', render);
+  document.getElementById('sort').addEventListener('change', render);
+  document.getElementById('clearBtn').addEventListener('click', function(){
+    document.getElementById('q').value = '';
+    document.getElementById('posted').value = '9999';
+    document.getElementById('sort').value = 'recent';
+    state.activeRemote.clear();
+    document.querySelectorAll('#remoteGroup input[type=checkbox]').forEach(function(c){ c.checked = false; });
+    render();
+  });
+
+  refreshDatasets();
+})();
+</script>
+</body>
+</html>
