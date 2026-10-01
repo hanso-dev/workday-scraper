@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# scraped output -- regenerate it, don't commit it
+data/*.json
+data/*.csv
+!data/.gitkeep
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/
