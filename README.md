@@ -9,6 +9,8 @@ https://manulife.wd3.myworkdayjobs.com/MFCJH_Jobs
 ```
 all work with the same tool — the tenant, data center, and site are derived from the URL itself.
 
+![demo](demo.gif)
+
 ## Architecture
 
 Three layers, each replaceable on its own:
